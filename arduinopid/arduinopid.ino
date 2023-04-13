@@ -1,3 +1,29 @@
+/*=============================================================
+
+  Arduino Hovercraft Control Code
+
+  This code was written for the university course (ENGR 290)
+  where an miniature autonomous hovercraft is built.
+
+  The hovercraft has a lift fan and a thrust fan.
+  The lift fan is close to the center of the body while the 
+  thrust fan is located at the front of the body on top of a
+  servo. This servo directs the thrust in the desired direction
+  for steering. 
+
+  The sensors used for autonomy include an MPU6050 (IMU),
+  two IR sensors and an ultrasonic sensor. The IMU is attached
+  to the body of the HC, while the others are attached to the 
+  thrust vectoring fan. One IR sensor is placed on each side of
+  the fan facing outwards (Left and Right). The ultrasonic sensor
+  is facing forwards.
+
+  The thrust vectoring steering control is controlled using a 
+  PID controller in reverse. A finite state machine is used 
+  to determine the setpoint for the controller depending on
+  the conditions the HC is in.
+  
+=============================================================*/
 #include <PID_v1.h>
 #include <Wire.h>
 #include <MPU6050_light.h>
@@ -60,6 +86,11 @@ const uint8_t cReferenceVoltage = 3.3;
 int mAnalogValue = 0;
 int mDistance = 0;
 
+/*=============================================================
+
+  Initial Setup
+
+=============================================================*/
 void setup() {
   // put your setup code here, to run once:
   Serial.begin(9600);
@@ -92,6 +123,11 @@ void setup() {
   delay(2000);
 }
 
+/*=============================================================
+
+  Loop function
+  
+=============================================================*/
 void loop() {
   // put your main code here, to run repeatedly:
   mpu.update();
@@ -101,12 +137,39 @@ void loop() {
   {
     myservo.write(Output+90);
     Serial.println(Output);
-    Serial.println(turningStateLeft);
-    Serial.println(turningStateRight);
   }
- 
 }
 
+/*=============================================================
+
+  Setpoint Selector FSM
+
+  This function chooses which setpoint the Servo PID (thrust fan)
+  should target.
+
+  There is a general IMU stabilization state where the fan
+  directs itself towards YAW zero in order to go straight.
+  This is needed because the lift fan's torque causes unwanted 
+  clockwise rotation.
+
+  There is a wall distance correction state where if the HC
+  gets too close to a side wall (detected by IR sensors), the
+  fan will slightly direct itself away from the approaching wall
+  in order to avoid collision and side dragging.
+
+  There is a front wall detection state which leads to a turning
+  state. Once a front wall is detected, the code checks on which
+  side the wall is closest to the HC, and directs the fan in the 
+  opposite direction to initiate a turn. 
+
+  In the turning state, the state becomes locked (meaning that no
+  other state can occur) until a full 90 degree rotation of the
+  HC's body is completed. This is checked by monitoring when the 
+  error between the IMU angle and targeted setpoint is fully 
+  corrected. Once that occurs, the FSM goes back to the IMU
+  stablizer state.
+  
+=============================================================*/
 void calculateSetpoint(){
   double leftWall = get_IR_distance_L();
   double rightWall = get_IR_distance_R();
